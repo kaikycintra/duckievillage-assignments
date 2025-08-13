@@ -49,8 +49,8 @@ class Agent:
         self.right_motor_matrix = np.zeros(shape=img_shape, dtype="float32")
         ### TODO! Replace with your code ################################################
         # Each motor activation matrix specifies how much power is given to the respective motor after the image processing routines are applied
-        self.left_motor_matrix[:, :img_shape[1]//2] = 1   # -1 'inhibits' motor, +1 'stimulates' motor
-        self.right_motor_matrix[:, img_shape[1]//2:] = 1  # this implements the aggressive behaviour
+        self.left_motor_matrix[:, :img_shape[1]//2] = -1   # -1 'inhibits' motor, +1 'stimulates' motor
+        self.right_motor_matrix[:, img_shape[1]//2:] = -1  # this implements the aggressive behaviour
 
     # Image processing routine - Color segmentation
     def preprocess(self, image: np.ndarray) -> np.ndarray:
@@ -78,9 +78,9 @@ class Agent:
         # Tweak with the constants below to get to change velocity or stabilize movements
         # Recall that pwm sets wheel torque, and is capped to be in [-1,1]
         gain = 5.0
-        const = 0.2 # power under null activation - this ensures the robot does not halt
-        pwm_left = const + R * gain
-        pwm_right = const + L * gain
+        const = 0.5 # power under null activation - this ensures the robot does not halt
+        pwm_left = const + L * gain
+        pwm_right = const + R * gain
         # print('>', L, R, pwm_left, pwm_right) # uncomment for debugging
         # Now send command
         self.env.step(pwm_left, pwm_right)
