@@ -37,10 +37,10 @@ class Agent:
         """ Initializes agent """
         self.env = environment
         # Color segmentation hyperspace - TODO: MODIFY THE VALUES BELOW
-        self.inner_lower = np.array([0, 0, 0])
-        self.inner_upper = np.array([179, 255, 255])
-        self.outer_lower = np.array([0, 0, 0])
-        self.outer_upper = np.array([179, 255, 255])
+        self.inner_lower = np.array([5, 100, 100])
+        self.inner_upper = np.array([30, 255, 255])
+        self.outer_lower = np.array([0, 0, 160])
+        self.outer_upper = np.array([179, 70, 255])
         # Acquire image for initializing activation matrices
         img = self.env.front()
         img_shape = img.shape[0], img.shape[1]
@@ -49,8 +49,11 @@ class Agent:
         self.outer_left_motor_matrix = np.zeros(shape=img_shape, dtype="float32")
         self.outer_right_motor_matrix = np.zeros(shape=img_shape, dtype="float32")
         # Connecition matrices - TODO: Replace with your code
-        self.inner_left_motor_matrix[:, :img_shape[1]//2] = 1
-        self.inner_right_motor_matrix[:, img_shape[1]//2:] = 1
+        self.inner_left_motor_matrix[:, :img_shape[1]//2 ] = -1.5
+        self.inner_right_motor_matrix[:, img_shape[1]//2:] = -1.5
+        self.outer_left_motor_matrix[img_shape[0]//2:, :img_shape[1]//4] = -1
+        self.outer_right_motor_matrix[img_shape[0]//2:, (img_shape[1]//2 + img_shape[1]//4):img_shape[1]] = -1
+
 
     # Image processing routine - Color segmentation
     def preprocess(self, image: np.ndarray) -> np.ndarray:
@@ -83,8 +86,8 @@ class Agent:
         R = rescale(R, 0, limit)
         # Tweak with the constants below to get to change velocity or to stabilize the behavior
         # Recall that the pwm signal sets the wheel torque, and is capped to be in [-1,1]
-        gain = 3.0   # increasing this will increasing responsitivity and reduce stability
-        const = 0.15 # power under null activation - this affects the base velocity
+        gain = 10   # increasing this will increasing responsitivity and reduce stability
+        const = 0.3 # power under null activation - this affects the base velocity
         pwm_left = const + R * gain
         pwm_right = const + L * gain
         # print('>', L, R, pwm_left, pwm_right) # uncomment for debugging
