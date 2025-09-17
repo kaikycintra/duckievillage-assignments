@@ -43,11 +43,12 @@ class Agent:
         self.motor_gain = 0.68*0.0784739898632288 # K_m
         self.motor_trim = 0.0007500911693361842 # K_t
         # Controller
-        self.C = 6.0 # constant for combining output values
+        self.C = 5.0 # constant for combining output values
         key_handler = key.KeyStateHandler()
         environment.unwrapped.window.push_handlers(key_handler)
-        self.velocity = 0.0 # robot's logitudinal velocity
+        self.velocity = 0.2 # robot's logitudinal velocity
         self.rotation = 0.0 # robot's angular velocity
+        self.error_history = []
         self.key_handler = key_handler
 
     def preprocess(self) -> float:
@@ -61,26 +62,28 @@ class Agent:
         V_r = (self.motor_gain + self.motor_trim)*(v+w*self.baseline/2)/self.radius
         return V_l, V_r
 
+    def integral(self, values, delta):
+        return sum(values)*delta
+
+    def derivada(self, v_futuro, v_atual, delta):
+        return (v_futuro-v_atual)/(delta)
+
     def send_commands(self, dt):
         ''' Agent control loop '''
-        # Manual control for testing in order to understand the environment.
-        # You should delete this snippet after your controller is set.
-        if self.key_handler[key.W]:
-            self.velocity = 0.2
-        if self.key_handler[key.A]:
-            self.rotation += 0.5
-        if self.key_handler[key.S]:
-            self.velocity = 0.0
-        if self.key_handler[key.D]:
-            self.rotation = -0.5
+        y = self.preprocess()
+        y_h = self.error_history
+        y_h.append(y)
+
+        Kp = 4*self.C * self.velocity
+        Kd = -1.5
+        Ki = -0.6
+        last_y = 0 if len(y_h) < 2 else y_h[-2]
+        
+        self.rotation = -Kp*y + Ki*self.integral(y_h, dt) + Kd*self.derivada(y, last_y, dt)
         # End of remote control snippet.
 
         pwm_left, pwm_right = self.get_pwm_control(self.velocity, self.rotation)
-
-        # Target value for lane-following.
-        y = self.preprocess()
-        # print(y) # uncomment this for debugging
-
+        
         self.env.step(pwm_left, pwm_right) # send commands to motor
         self.env.render() # simulate environment
 
