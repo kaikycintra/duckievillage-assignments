@@ -53,6 +53,14 @@ class Agent:
         self.K_m = 0.0
         # K_t constant.
         self.K_t = 0.0
+        # Wheel radius.
+        self.radius = 0.0318 # [m]
+        # Distance between wheels
+        self.baseline = 0.102 # [m]
+
+        # Motor constants
+        self.motor_gain = 0.0525 # K_m -- you should modify this value
+        self.motor_trim = 0.0006075  # K_t -- you should modify this value
 
         # Record trajectory.
         self.trajectory = [environment.get_position()]
@@ -66,9 +74,9 @@ class Agent:
 
     def get_pwm_control(self, v: float, w: float)-> (float, float):
         ''' Takes velocity v and angle w and returns left and right power to motors.'''
-        l = 0
-        r = 0
-        return l, r
+        V_l = (self.motor_gain - self.motor_trim)*(v-w*self.baseline/2)/self.radius
+        V_r = (self.motor_gain + self.motor_trim)*(v+w*self.baseline/2)/self.radius
+        return V_l, V_r
 
     def send_commands(self, dt):
         ''' Agent control loop '''
@@ -88,7 +96,7 @@ class SquareAgent(Agent):
     def start(self):
         super().start()
         # Initial time we give for the robot when it starts moving. Change as needed.
-        self.time = 1
+        self.time = 10
 
     def send_commands(self, dt):
         ''' Agent control loop '''
@@ -97,10 +105,14 @@ class SquareAgent(Agent):
         # Here's a snippet of code for riding in a straight line. Adapt your code to ride in a
         # rectangle.
         pwm_left, pwm_right = 0, 0
-        if self.time > 0:
+        if self.time:
             self.time -= dt
-            v, w = 0.5, 0.0
-            pwm_left, pwm_right = self.get_pwm_control(v, w)
+            if math.floor(self.time) % 2 == 0:
+                v, w = 0.5, 0.0
+                pwm_left, pwm_right = self.get_pwm_control(v, w)
+            else:
+                v, w = 0.0, 0.8*np.pi
+                pwm_left, pwm_right = self.get_pwm_control(v, w)
         elif self.running:
             self.running = False
         # End of snippet of code for line drawing.
@@ -116,7 +128,7 @@ class CircleAgent(Agent):
     def start(self):
         super().start()
         # Initial time we give for the robot when it starts moving. Change as needed.
-        self.time = 1
+        self.time = 10
 
     def send_commands(self, dt):
         ''' Agent control loop '''
@@ -127,7 +139,7 @@ class CircleAgent(Agent):
         pwm_left, pwm_right = 0, 0
         if self.time > 0:
             self.time -= dt
-            v, w = 0.5, 0.0
+            v, w = 0.5, 0.5
             pwm_left, pwm_right = self.get_pwm_control(v, w)
         elif self.running:
             self.running = False
@@ -140,11 +152,14 @@ class OvertakeAgent(Agent):
     def __init__(self, env):
         '''Constructs an OvertakeAgent that does an overtake.'''
         super().__init__(env)
+        self.turning = False
 
     def start(self):
         super().start()
         # Initial time we give for the robot when it starts moving. Change as needed.
-        self.time = self.t_0
+        self.time = 100
+        t_angle = 0.1
+        self.steer = 50*[0.0] + 105*[t_angle] + 50*[0.0] + 105*[-t_angle] + 50*[0.0] + 105*[-t_angle] + 50*[0.0] + 105*[t_angle] + 50*[0.0]# sinal de controle de velocidade angular
 
     def send_commands(self, dt):
         ''' Agent control loop '''
@@ -154,9 +169,15 @@ class OvertakeAgent(Agent):
         # rectangle.
         pwm_left, pwm_right = 0, 0
         if self.time > 0:
-            self.time -= dt
-            v, w = 0.5, 0.0
-            pwm_left, pwm_right = self.get_pwm_control(v, w)
+            if len(self.steer) == 0:
+                self.time = 0
+                print('acabou o overtake')
+            else:
+                self.time -= dt
+                w = self.steer.pop(0)
+                print(w)
+                v = 0.2
+                pwm_left, pwm_right = self.get_pwm_control(v, w)
         elif self.running:
             self.running = False
         # End of snippet of code for line drawing.
