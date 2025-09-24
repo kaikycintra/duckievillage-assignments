@@ -12,8 +12,8 @@
 #  - Write a potential field based agent.
 #
 # Don't forget to run this file from the Duckievillage root directory path (example):
-#   cd ~/MAC0318/duckievillage
-#   conda activate duckietown
+#   cd ~/duckievillage
+#   source bin/activate 
 #   python3 assignments/p-fields/agent.py
 #
 # Submission instructions:
@@ -135,10 +135,13 @@ class Agent:
             pwm_left -= 0.5; pwm_right -= 0.5
         if self.key_handler[key.D]:
             pwm_left += 0.25; pwm_right -= 0.25
-
+        # current position
         p = self.env.get_position()
+        # target position
         q = self.preprocess(p, mr_duckie_pos(), self.env.poly_map.polygons())
-
+        # robot's heading
+        a = self.env.cur_angle
+        # TODO: compute velocity and rotation using PID controller
         pwm_left, pwm_right = self.get_pwm_control(self.velocity, self.rotation)
         self.env.step(pwm_left, pwm_right)
         self.env.render()
@@ -153,7 +156,7 @@ def main():
         std_l = 1e-7,
         std_r = 1e-7,
         seed = 101,
-        map_name = './maps/catch.yaml',
+        map_name = './maps/catch',
         draw_curve = False,
         draw_bbox = False,
         domain_rand = False,
@@ -161,7 +164,7 @@ def main():
         distortion = False,
         top_down = False,
         cam_height = 10,
-        is_external_map = True,
+        #is_external_map = True,
         randomize_maps_on_reset = False,
         enable_polymap = True,
     )
