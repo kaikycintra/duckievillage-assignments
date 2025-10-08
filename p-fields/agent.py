@@ -1,8 +1,8 @@
 # MAC0318 Intro to Robotics
 # Please fill-in the fields below with your info
 #
-# Name:
-# NUSP:
+# Name: Kaiky Henrique Ribeiro Cintra
+# NUSP: 13731160
 #
 # ---
 #
@@ -85,7 +85,7 @@ class Agent:
         self.motor_gain = 0.68*0.0784739898632288
         self.motor_trim = 0.0007500911693361842
 
-        self.velocity = 0
+        self.velocity = 0.25
         self.rotation = 0
 
         self.K_att = 0
@@ -96,6 +96,7 @@ class Agent:
 
         self.K_v = 0
         self.K_w = 0
+        self.error_history = []
 
         key_handler = key.KeyStateHandler()
         environment.unwrapped.window.push_handlers(key_handler)
@@ -109,33 +110,80 @@ class Agent:
 
     def F_att(self, p: np.ndarray, g: np.ndarray) -> float:
         '''Returns the attraction force applied at position p from goal g.'''
-        return 0.0
+        k_att = 1
+        direction = g-p
+        return k_att*direction
 
-    def F_rep(self, p: np.ndarray, o: list) -> float:
-        '''Returns the repulsion force applied at position p from object o.'''
-        return 0.0
+    def F_rep_vector(self, p: np.ndarray, o: list) -> np.ndarray: # New function for force vector
+        '''Returns the repulsion force vector applied at position p from object o.'''
+        k_rep = 4
+        rho_0 = 0.5
+        
+        dist_to_obj, nearest_point = dist_obj(p, o)
+        
+        if dist_to_obj > rho_0:
+            return np.array([0.0, 0.0])
+        
+        direction_vector = p - nearest_point 
+        
+        unit_vector = direction_vector / dist_to_obj
+        
+        # Magnitude of the force:
+        # F_rep_magnitude = k_rep * (1/rho - 1/rho_0) * (1/rho^2)
+        magnitude = k_rep * (1.0/dist_to_obj - 1.0/rho_0) * (1.0/dist_to_obj**2)
+        
+        return magnitude * unit_vector
+
 
     def preprocess(self, p: np.ndarray, g: np.ndarray, P: list) -> np.ndarray:
         '''
         Takes the bot's current position p, a goal position g, and a list of polygons P. The
-        function should then compute the force and return the resulting point for the bot to
-        follow.
+        function should then compute the TOTAL FORCE VECTOR and return it.
         '''
-        return np.array([0.0, 0.0])
+        F_att = self.F_att(p, g)
+
+        F_rep_total = np.array([0.0, 0.0])
+        for obstaculo in P:
+            F_rep_total += self.F_rep_vector(p, obstaculo) 
+        
+        F_total = F_att + F_rep_total
+
+        return F_total
+
+    def piRange(self, angulo: float) -> float:
+        return (angulo + np.pi) % (2 * np.pi) - np.pi
 
     def send_commands(self, dt: float):
         ''' Agent control loop '''
-        ### Duckietowns reference has the y-axis increasing downward with respect to the top-view
-        ### and the x-axis incresing to the right
-        # current position
+        pwm_left, pwm_right = 0, 0
+
         p = self.env.get_position()
-        # target position
-        q = self.preprocess(p, mr_duckie_pos(), self.env.poly_map.polygons())
-        # robot's heading measured clockwise w.r.t. to the x-axis (i.e, from the x-axis towards the y-axis)
-        a = self.env.cur_angle + np.pi # fix because angle is computed in [-pi, pi] range
-        # TODO: compute velocity and rotation using point-following PID controller 
-        # that you solved in the notebook
-        pwm_left, pwm_right = self.get_pwm_control(self.velocity, self.rotation)
+        q = mr_duckie_pos()
+        total_force = self.preprocess(p, q, self.env.poly_map.polygons())
+
+        # Compute the direction to move (angle to the resultant force)
+        direction = total_force - p
+        
+        distance = np.linalg.norm(direction)
+
+        a = self.env.cur_angle
+        target_a = math.atan2(-direction[1], direction[0])
+        error_theta = self.piRange(target_a - a)
+
+        Kp_a = 2
+        Kp_v = 0.3
+
+        steer = Kp_a*error_theta
+        velocity = Kp_v*distance*max(0.0, math.cos(error_theta))
+
+        pwm_left, pwm_right = self.get_pwm_control(velocity, steer)
+        print(f"error theta: {error_theta}")
+        print(f"steer: {steer}")
+        print(f"distance: {distance}")
+        print(f"velocity: {velocity}")
+        print(f"current_angle: {a}")
+        print(f"p: {p}")
+        print(f"q: {q}")
         self.env.step(pwm_left, pwm_right)
         self.env.render()
 
