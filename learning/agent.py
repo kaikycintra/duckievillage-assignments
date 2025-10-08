@@ -3,8 +3,9 @@
 ###
 # MAC0318 - Intro to Robotics
 #
-# Name:
-# NUSP:    
+# Name: Kaiky Henrique Ribeiro Cintra
+# NUSP: 13731160
+# MODELO DISPONÍVEL EM https://drive.google.com/file/d/1FT8oSUeEwwUn5Z5Jh5aqWUwZDIB9woVP/view?usp=sharing
 #
 # ---
 #
@@ -29,7 +30,7 @@ import math
 from pyglet.window import key
 from duckievillage import create_env, FRONT_VIEW_MODE
 import cv2
-#import tensorflow
+import tensorflow
 
 # Uncomment the following line if you get an error with the parallel library
 # accusing multiple instantiations
@@ -59,7 +60,9 @@ class Agent:
         self.horizon = 180 # in pixels, considering a 800x600 image size
         ######################################################################
         # Regressor - Replace with your model's filepath
-        #self.pose_estimator = Agent.load_regression_model("assignments/regression/mlp_lane_pose_estimation.h5")
+        self.pose_estimator = Agent.load_regression_model("assignments/learning/mlp_lane_pose_estimation.h5")
+        # MODELO DISPONÍVEL EM https://drive.google.com/file/d/1FT8oSUeEwwUn5Z5Jh5aqWUwZDIB9woVP/view?usp=sharing
+        self.error_history = []
         ######################################################################
         # Controller
         key_handler = key.KeyStateHandler()
@@ -68,14 +71,14 @@ class Agent:
         self.rotation = 0.0 # robot's angular velocity
         self.key_handler = key_handler
 
-    # @staticmethod
-    # def load_regression_model(filepath: str) -> tensorflow.keras.Model:
-    #     ''' Loads a Tensorflow model. '''
-    #     #model = keras.models.load_model(filepath)
-    #     # If you get an error (most likely due to loading a model saved in a newer version of TensorFlow, try using the line below instead)
-    #     model = tensorflow.keras.models.load_model(filepath, compile=False)
-    #     print(model.summary())
-    #     return model
+    @staticmethod
+    def load_regression_model(filepath: str) -> tensorflow.keras.Model:
+         ''' Loads a Tensorflow model. '''
+         #model = keras.models.load_model(filepath)
+         # If you get an error (most likely due to loading a model saved in a newer version of TensorFlow, try using the line below instead)
+         model = tensorflow.keras.models.load_model(filepath, compile=False)
+         print(model.summary())
+         return model
 
     def preprocess(self) -> float:
         ''' Returns the metric to be used as signal for the PID controller. '''
@@ -101,8 +104,7 @@ class Agent:
         #  the first dimension of the input is the batch size: we are using a batch of 1 instance, 
         #  so we need to reshape the input to match the expected form -- also, tensorflow outputs tensors, 
         #   and we expect a real value, so we just get the single element of the output
-        #estimate = self.pose_estimator.predict(img.reshape((-1,42,80,2)))[0,0] # note, this should match the resized image size above
-        estimate = 0.0 
+        estimate = self.pose_estimator.predict(img.reshape((-1,42,80,2)))[0,0] # note, this should match the resized image size above
         return estimate # should approximate value of y = 6*d + alpha
 
     def get_pwm_control(self, v: float, w: float)-> (float, float):
@@ -111,31 +113,31 @@ class Agent:
         V_r = (self.motor_gain + self.motor_trim)*(v+w*self.baseline/2)/self.radius
         return V_l, V_r
 
+    def integral(self, values, delta):
+        return sum(values)*delta
+
+    def derivada(self, v_futuro, v_atual, delta):
+        return (v_futuro-v_atual)/(delta)
+
     def send_commands(self, dt) -> None:
         ''' Agent control loop '''
-        # Manual control for testing in order to understand the environment.
-        # -- You should delete this snippet after your controller is set.
-        if self.key_handler[key.W]:
-            self.velocity = 0.2
-        if self.key_handler[key.A]:
-            self.rotation += 0.5
-        if self.key_handler[key.S]:
-            self.velocity = 0.0
-        if self.key_handler[key.D]:
-            self.rotation = -0.5
-        # -- End of remote control snippet.
+        pwm_left, pwm_right = 0, 0
 
-        # Target value for lane-following.
         y = self.preprocess()
-        # print(y) # uncomment this for debugging
+        y_h = self.error_history
+        y_h.append(y)
+        print(f"y: {y}")
 
-        # Control - replace with your PID controller you developed         
-        self.rotation = -5*y
-        # Transform into motor duty cicle equivalents
-        pwm_left, pwm_right = self.get_pwm_control(self.velocity, self.rotation)
-        # Now send commands
-        self.env.step(pwm_left, pwm_right) # send commands to motor
-        self.env.render() # simulate environment
+        Kp = 20 * self.velocity
+        Kd = -1.5
+        Ki = -0.6
+        last_y = 0 if len(y_h) < 2 else y_h[-2]
+
+        steer = -Kp*y + Ki*self.integral(y_h, dt) + Kd*self.derivada(y, last_y, dt)
+        
+        pwm_left, pwm_right = self.get_pwm_control(self.velocity, steer)
+        self.env.step(pwm_left, pwm_right)
+        self.env.render()
 
 
 def main():
