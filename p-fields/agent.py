@@ -114,10 +114,11 @@ class Agent:
         direction = g-p
         return k_att*direction
 
-    def F_rep_vector(self, p: np.ndarray, o: list) -> np.ndarray: # New function for force vector
+
+    def F_rep_vector(self, p: np.ndarray, o: list) -> np.ndarray:
         '''Returns the repulsion force vector applied at position p from object o.'''
-        k_rep = 4
-        rho_0 = 0.5
+        k_rep = 1.5
+        rho_0 = 0.3
         
         dist_to_obj, nearest_point = dist_obj(p, o)
         
@@ -128,8 +129,6 @@ class Agent:
         
         unit_vector = direction_vector / dist_to_obj
         
-        # Magnitude of the force:
-        # F_rep_magnitude = k_rep * (1/rho - 1/rho_0) * (1/rho^2)
         magnitude = k_rep * (1.0/dist_to_obj - 1.0/rho_0) * (1.0/dist_to_obj**2)
         
         return magnitude * unit_vector
@@ -159,31 +158,26 @@ class Agent:
 
         p = self.env.get_position()
         q = mr_duckie_pos()
-        total_force = self.preprocess(p, q, self.env.poly_map.polygons())
-
-        # Compute the direction to move (angle to the resultant force)
-        direction = total_force - p
-        
-        distance = np.linalg.norm(direction)
-
+        # target position
         a = self.env.cur_angle
-        target_a = math.atan2(-direction[1], direction[0])
-        error_theta = self.piRange(target_a - a)
+        # TODO: compute velocity and rotation using PID controller
+        total_force = self.preprocess(p, q, self.env.poly_map.polygons())
+        print(f"total force: {total_force}")
+        
+        distance = np.linalg.norm(total_force)
+
+        if distance > 0:
+            angulo_desejado = math.atan2(-total_force[1], total_force[0])
+            
+            error_theta = self.piRange(angulo_desejado - a)
+        else:
+            error_theta = 0.0
 
         Kp_a = 2
-        Kp_v = 0.3
 
         steer = Kp_a*error_theta
-        velocity = Kp_v*distance*max(0.0, math.cos(error_theta))
 
-        pwm_left, pwm_right = self.get_pwm_control(velocity, steer)
-        print(f"error theta: {error_theta}")
-        print(f"steer: {steer}")
-        print(f"distance: {distance}")
-        print(f"velocity: {velocity}")
-        print(f"current_angle: {a}")
-        print(f"p: {p}")
-        print(f"q: {q}")
+        pwm_left, pwm_right = self.get_pwm_control(self.velocity, steer)
         self.env.step(pwm_left, pwm_right)
         self.env.render()
 
