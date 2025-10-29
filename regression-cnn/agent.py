@@ -1,8 +1,10 @@
 # MAC0318 Intro to Robotics
 # Please fill-in the fields below with your info
 #
-# Name:
-# NUSP:
+# Name: Kaiky Henrique Ribeiro Cintra
+# NUSP: 13731160
+# Link do modelo
+# https://drive.google.com/file/d/1pwKTCbev6WBtQn78d9XxoC4cAOCxuFDk/view?usp=sharing
 #
 # ---
 #
@@ -41,6 +43,7 @@ class Agent:
         self.baseline = env.unwrapped.wheel_dist/2
         self.motor_gain = 0.68*0.0784739898632288
         self.motor_trim = 0.0007500911693361842
+        self.error_history = []
 
         if randomize:
             f = [self.env.add_static_duckie, self.env.add_static_big_duckie, self.env.add_cone]
@@ -89,15 +92,28 @@ class DataAgent(Agent):
         '''Returns the metric to be used as signal for the PID controller.'''
         d, alpha = self.env.lf_target()
         return self.C*d+alpha
+    
+    def integral(self, values, delta):
+        return sum(values)*delta
+
+    def derivada(self, v_futuro, v_atual, delta):
+        return (v_futuro-v_atual)/(delta)
 
     def send_commands(self, dt):
         ''' Agent control loop '''
         pwm_left, pwm_right = 0, 0
 
-        t = self.preprocess()
-        # Paste your PID controller here.
+        y = self.preprocess()
+        y_h = self.error_history
+        y_h.append(y)
+
         velocity = 0.2
-        rotation = -3.5*t
+        Kp = 4*self.C * velocity
+        Kd = -1.5
+        Ki = -0.6
+        last_y = 0 if len(y_h) < 2 else y_h[-2]
+        
+        rotation = -Kp*y + Ki*self.integral(y_h, dt) + Kd*self.derivada(y, last_y, dt)
 
         self.images.append(cv2.resize(self.env.front(), (80, 60)))
         self.labels.append((velocity, rotation))
@@ -111,7 +127,9 @@ class EvaluationAgent(Agent):
     def __init__(self, environment):
         ''' Initializes agent '''
         super().__init__(environment, randomize = False)
-        self.pose_estimator = EvaluationAgent.load_regression_model("assignments/regression-cnn/cnn_lane_pos_estimation.h5")
+        # link do modelo
+        # https://drive.google.com/file/d/1pwKTCbev6WBtQn78d9XxoC4cAOCxuFDk/view?usp=sharing
+        self.pose_estimator = EvaluationAgent.load_regression_model("assignments/regression-cnn/direction_estimate.h5")
         self.score = 0
 
     @staticmethod
@@ -134,6 +152,7 @@ class EvaluationAgent(Agent):
         pwm_left, pwm_right = 0, 0
 
         velocity, rotation = self.preprocess()
+        velocity = 0.2
 
         pwm_left, pwm_right = self.get_pwm_control(velocity, rotation)
         _, r, _, _ = self.env.step(pwm_left, pwm_right)
@@ -150,7 +169,7 @@ def main():
         std_l = 1e-7,
         std_r = 1e-7,
         seed = 101,
-        map_name = './maps/loop_empty.yaml',
+        map_name = './maps/catch.yaml',
         draw_curve = False,
         draw_bbox = False,
         domain_rand = False,
@@ -173,8 +192,8 @@ def main():
         if symbol == key.ESCAPE: # exit simulation
             # Saves dataset to /tmp.
             if isinstance(agent, DataAgent):
-                np.save("/tmp/images.npy", agent.images, allow_pickle = True)
-                np.save("/tmp/labels.npy", agent.labels, allow_pickle = True)
+                np.save("/tmp/images2.npy", agent.images, allow_pickle = True)
+                np.save("/tmp/labels2.npy", agent.labels, allow_pickle = True)
             env.close()
             sys.exit(0)
         elif (symbol == key.E) or (symbol == key.D):
