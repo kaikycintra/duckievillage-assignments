@@ -1,9 +1,9 @@
 # MAC0318 Intro to Robotics
 # Please fill-in the fields below with your info
 #
-# Name:
-# NUSP:
-#
+# Name: Kaiky Henrique Ribeiro Cintra
+# NUSP: 13731160
+# modelo disponível em https://drive.google.com/file/d/1x6HiH2y5fNEgs8vnmqQPeBJwqOFLNEk8/view?usp=sharing
 # ---
 #
 # Assignment 10 - Imitation learning
@@ -89,34 +89,57 @@ class DataAgent(Agent):
 
         self.images = []
         self.labels = []
-        self.paused = False
+        self.paused = True
+        self.manual = False
+        self.error_history = []
+        self.smoothed_rotation = 0.0 # variável para controle manual da rotação
+        self.smoothing_factor = 0.1 # quanto menor mais lento para atingir o target
 
     def preprocess(self) -> float:
         '''Returns the metric to be used as signal for the PID controller.'''
         d, alpha = self.env.lf_target()
         return self.C*d+alpha
+    
+    def integral(self, values, delta):
+        return sum(values)*delta
+
+    def derivada(self, v_futuro, v_atual, delta):
+        return (v_futuro-v_atual)/(delta)
 
     def send_commands(self, dt):
         ''' Agent control loop '''
         pwm_left, pwm_right = 0, 0
 
-        t = self.preprocess()
-        # Paste your PID controller here.
-        velocity = 0.2
-        rotation = -3.5*t
-
-        if self.key_handler[key.W]:
+        if self.manual:
             velocity = 0.2
-        if self.key_handler[key.A]:
-            rotation = 0.8
-        if self.key_handler[key.S]:
-            velocity = 0.0
-        if self.key_handler[key.D]:
-            rotation = -0.8
+            target_rotation = 0
+            if self.key_handler[key.A]:
+                target_rotation = 2
+            if self.key_handler[key.D]:
+                target_rotation = -2
+
+            # baseado em exponential smoothing https://en.wikipedia.org/wiki/Exponential_smoothing
+            self.smoothed_rotation = (1.0 - self.smoothing_factor) * self.smoothed_rotation + self.smoothing_factor * target_rotation 
+            rotation = self.smoothed_rotation
+
+        else:
+            y = self.preprocess()
+            y_h = self.error_history
+            y_h.append(y)
+            velocity = 0.2
+            Kp = 4*self.C * velocity
+            Kd = -1.5
+            Ki = -0.6
+            last_y = 0 if len(y_h) < 2 else y_h[-2]
+            rotation = -Kp*y + Ki*self.integral(y_h, dt) + Kd*self.derivada(y, last_y, dt)
+            rotation = np.clip(rotation, -2, 2)
+
 
         if not self.paused:
             self.images.append(cv2.resize(self.env.front(), (80, 60)))
             self.labels.append((velocity, rotation))
+
+        #print(rotation)
 
         pwm_left, pwm_right = self.get_pwm_control(velocity, rotation)
         self.env.step(pwm_left, pwm_right)
@@ -127,7 +150,8 @@ class EvaluationAgent(Agent):
     def __init__(self, environment):
         ''' Initializes agent '''
         super().__init__(environment, randomize = True)
-        self.pose_estimator = EvaluationAgent.load_regression_model("assignments/regression-cnn/cnn_lane_pos_estimation.h5")
+        # modelo disponível em https://drive.google.com/file/d/1x6HiH2y5fNEgs8vnmqQPeBJwqOFLNEk8/view?usp=sharing
+        self.pose_estimator = EvaluationAgent.load_regression_model("assignments/imitation/imitation.h5")
         self.score = 0
 
     @staticmethod
@@ -142,14 +166,15 @@ class EvaluationAgent(Agent):
     def preprocess(self) -> (float, float):
         '''Returns the metric to be used as signal for the PID controller.'''
         I = cv2.resize(self.env.front(), (80, 60))/255
-        v, w = self.pose_estimator.predict(I.reshape((-1, 60, 80, 3)))[0]
-        return v, w
+        w = 2*self.pose_estimator.predict(I.reshape((-1, 60, 80, 3)))[0]
+        return w
 
     def send_commands(self, dt):
         ''' Agent control loop '''
         pwm_left, pwm_right = 0, 0
 
-        velocity, rotation = self.preprocess()
+        velocity = 0.2
+        rotation = self.preprocess()
 
         pwm_left, pwm_right = self.get_pwm_control(velocity, rotation)
         _, r, _, _ = self.env.step(pwm_left, pwm_right)
@@ -201,6 +226,9 @@ def main():
             pyglet.clock.schedule_interval(agent.send_commands, 1.0 / env.unwrapped.frame_rate)
         elif symbol == key.R:
             agent.randomize()
+        elif symbol == key.C:
+            agent.manual = not agent.manual
+            print("Controle manual", "ativado" if agent.manual else "desativado")
         elif (symbol == key.P) and isinstance(agent, DataAgent):
             agent.paused = not agent.paused
             print("Data collection is:", "paused" if agent.paused else "unpaused")
